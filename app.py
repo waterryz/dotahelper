@@ -36,14 +36,11 @@ def get_hero_items(hero: str):
     return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
 
 # --- Telegram handlers ---
-@dp.message(commands=["start"])
+from aiogram.filters import CommandStart
+
+@dp.message(CommandStart())
 async def start_cmd(message: types.Message):
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton("🔥 Актуальная мета", callback_data="meta"),
-        InlineKeyboardButton("⚔️ Актуальные сборки", callback_data="builds")
-    )
-    await message.answer("Привет! 💎 Я Dota 2 помощник.\nВыбери, что хочешь узнать:", reply_markup=kb)
+
 
 @dp.callback_query(lambda c: c.data == "meta")
 async def show_meta(callback: types.CallbackQuery):
