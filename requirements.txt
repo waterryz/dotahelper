@@ -6,4 +6,3 @@ lxml==5.2.1
 python-dotenv
 gunicorn
 pydantic==2.5.3
-pydantic-core==2.14.6
