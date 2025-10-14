@@ -71,13 +71,13 @@ def home():
     return "✅ Flask бот для Dota 2 работает!"
 
 @app.route("/webhook", methods=["POST"])
-async def webhook():
-    data = await request.get_json()
+def webhook():
+    data = request.get_json(force=True)
     update = Update.model_validate(data)
-    await dp.feed_update(bot, update)
+    asyncio.get_event_loop().create_task(dp.feed_update(bot, update))
     return "OK", 200
 
-# --- Webhook setup (один раз при старте) ---
+# --- Webhook setup ---
 @app.before_serving
 async def setup_webhook():
     hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
