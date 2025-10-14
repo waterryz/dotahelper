@@ -1,6 +1,5 @@
 Flask==3.0.3
 aiogram==3.13.0
-aiohttp==3.9.5
 requests
 beautifulsoup4
 lxml
