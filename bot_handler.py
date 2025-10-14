@@ -1,77 +1,57 @@
-from aiogram import types
+from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
-import requests
+from aiogram.utils import executor
+from dotenv import load_dotenv
+import os, requests
 from bs4 import BeautifulSoup
 
-# ==========================
-# 🔥 Функции парсинга Dotabuff
-# ==========================
+load_dotenv()
+BOT_TOKEN = os.getenv("7641143202:AAHN6GuQQrGXI4tsGwlmUR0rC3ABPohiqlc")
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(bot)
 
 def get_meta_heroes():
     url = "https://www.dotabuff.com/heroes/meta"
     headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.text, "lxml")
-
-    heroes = []
-    table = soup.find("table", class_="sortable")
-    if not table:
-        return ["❌ Не удалось получить данные с Dotabuff"]
-
-    for row in table.find_all("tr")[1:11]:
-        cols = row.find_all("td")
-        hero = cols[1].text.strip()
-        win_rate = cols[2].text.strip()
-        popularity = cols[3].text.strip()
-        heroes.append(f"{hero} — 🏆 {win_rate} | 📈 {popularity}")
-    return heroes
-
+    soup = BeautifulSoup(requests.get(url, headers=headers).text, "lxml")
+    rows = soup.find_all("tr")[1:11]
+    return [
+        f"{r.find_all('td')[1].text.strip()} — 🏆 {r.find_all('td')[2].text.strip()} | 📈 {r.find_all('td')[3].text.strip()}"
+        for r in rows
+    ]
 
 def get_hero_items(hero: str):
     url = f"https://www.dotabuff.com/heroes/{hero}/items"
     headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.text, "lxml")
+    soup = BeautifulSoup(requests.get(url, headers=headers).text, "lxml")
+    rows = soup.find_all("tr")[1:11]
+    return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
 
-    items = []
-    table = soup.find("table", class_="sortable")
-    if not table:
-        return ["❌ Не удалось получить сборку."]
+@dp.message_handler(commands=["start"])
+async def start(message: types.Message):
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        InlineKeyboardButton("🔥 Мета", callback_data="meta"),
+        InlineKeyboardButton("⚔️ Сборки", callback_data="builds"),
+    )
+    await message.answer("Привет! Я Dota 2 бот 💎\nВыбери действие:", reply_markup=kb)
 
-    for row in table.find_all("tr")[1:11]:
-        cols = row.find_all("td")
-        item_name = cols[1].text.strip()
-        win_rate = cols[2].text.strip()
-        items.append(f"{item_name} — {win_rate}")
-    return items
+@dp.callback_query_handler(lambda c: c.data == "meta")
+async def show_meta(callback_query: types.CallbackQuery):
+    heroes = get_meta_heroes()
+    await bot.send_message(callback_query.from_user.id, "🔥 Топ-10 героев:\n\n" + "\n".join(heroes))
 
-# ==========================
-# 🎮 Telegram Handlers
-# ==========================
+@dp.callback_query_handler(lambda c: c.data == "builds")
+async def ask_hero(callback_query: types.CallbackQuery):
+    await bot.send_message(callback_query.from_user.id, "Введи имя героя латиницей (например, `sven`, `lion`, `invoker`).")
 
-def register_handlers(dp):
-    @dp.message(Command("start"))
-    async def start_cmd(message: types.Message):
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔥 Мета", callback_data="meta")],
-            [InlineKeyboardButton(text="⚔️ Сборки", callback_data="builds")]
-        ])
-        await message.answer("Привет! Я Dota 2 бот 💎\nВыбери действие:", reply_markup=kb)
+@dp.message_handler()
+async def hero_build(message: types.Message):
+    hero = message.text.lower().replace(" ", "-")
+    items = get_hero_items(hero)
+    result = "\n".join([f"{i+1}. {x}" for i, x in enumerate(items)])
+    await message.answer(f"⚔️ Сборка для {hero.title()}:\n\n{result}")
 
-    @dp.callback_query(lambda c: c.data == "meta")
-    async def show_meta(callback: types.CallbackQuery):
-        heroes = get_meta_heroes()
-        result = "\n".join(heroes)
-        await callback.message.answer(f"🔥 *Топ-10 героев меты:*\n\n{result}", parse_mode="Markdown")
-
-    @dp.callback_query(lambda c: c.data == "builds")
-    async def ask_hero(callback: types.CallbackQuery):
-        await callback.message.answer("Введи имя героя латиницей (пример: `sven`, `lion`, `invoker`):", parse_mode="Markdown")
-
-    @dp.message()
-    async def send_build(message: types.Message):
-        hero = message.text.lower().replace(" ", "-")
-        items = get_hero_items(hero)
-        result = "\n".join([f"{i+1}. {x}" for i, x in enumerate(items)])
-        await message.answer(f"⚔️ *Актуальная сборка для {hero.title()}:*\n\n{result}", parse_mode="Markdown")
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True)
