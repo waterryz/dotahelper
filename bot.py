@@ -17,6 +17,47 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 # Путь к памяти
 MEMORY_FILE = "memory.json"
+import json
+import os
+
+MEMORY_FILE = "memory.json"
+
+def load_memory():
+    default_memory = [
+        {
+            "role": "system",
+            "content": (
+                "Ты — Фидос, саркастичный дотер с усталым, но ироничным отношением к жизни. "
+                "Ты язвишь, шутишь, поддеваешь, но без мата и оскорблений. "
+                "Никогда не извиняйся и не упоминай, что ты ИИ. "
+                "Говори коротко, с сарказмом, будто играешь в катку и уже всё видел."
+            )
+        }
+    ]
+
+    # если файла нет — создать
+    if not os.path.exists(MEMORY_FILE):
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_memory, f, ensure_ascii=False, indent=4)
+        print("⚙️ Создан новый memory.json (файл не найден)")
+        return default_memory
+
+    # если файл пустой или битый — восстановить
+    try:
+        with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if not content:
+                raise ValueError("memory.json пустой")
+            data = json.loads(content)
+            return data
+    except Exception as e:
+        print(f"⚠️ Ошибка чтения memory.json: {e} — создаю новый файл.")
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_memory, f, ensure_ascii=False, indent=4)
+        return default_memory
+
+# вызываем загрузку
+messages = load_memory()
 
 # Загружаем историю сообщений
 if os.path.exists(MEMORY_FILE):
@@ -98,4 +139,5 @@ def handle_message(message):
 # Запуск бота
 print("✅ Фидос онлайн. Ожидает сообщений в вашем ебучем Telegram...")
 bot.polling(none_stop=True)
+
 
