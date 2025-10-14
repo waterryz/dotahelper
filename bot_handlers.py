@@ -1,17 +1,9 @@
-import asyncio
-import os
-import requests
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-
+router = Router()
 
 def get_meta_heroes():
     url = "https://www.dotabuff.com/heroes/meta"
@@ -23,7 +15,6 @@ def get_meta_heroes():
         for r in rows
     ]
 
-
 def get_hero_items(hero: str):
     url = f"https://www.dotabuff.com/heroes/{hero}/items"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -31,8 +22,7 @@ def get_hero_items(hero: str):
     rows = soup.find_all("tr")[1:11]
     return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
 
-
-@dp.message(F.text == "/start")
+@router.message(F.text == "/start")
 async def start(message: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔥 Мета", callback_data="meta")],
@@ -40,32 +30,20 @@ async def start(message: types.Message):
     ])
     await message.answer("Привет! Я Dota 2 бот 💎\nВыбери действие:", reply_markup=kb)
 
-
-@dp.callback_query(F.data == "meta")
+@router.callback_query(F.data == "meta")
 async def show_meta(callback_query: types.CallbackQuery):
     heroes = get_meta_heroes()
-    await bot.send_message(callback_query.from_user.id, "🔥 Топ-10 героев:\n\n" + "\n".join(heroes))
+    await callback_query.message.answer("🔥 Топ-10 героев:\n\n" + "\n".join(heroes))
     await callback_query.answer()
 
-
-@dp.callback_query(F.data == "builds")
+@router.callback_query(F.data == "builds")
 async def ask_hero(callback_query: types.CallbackQuery):
-    await bot.send_message(callback_query.from_user.id, "Введи имя героя латиницей (например, `sven`, `lion`, `invoker`).")
+    await callback_query.message.answer("Введи имя героя латиницей (например, `sven`, `lion`, `invoker`).")
     await callback_query.answer()
 
-
-@dp.message()
+@router.message()
 async def hero_build(message: types.Message):
     hero = message.text.lower().replace(" ", "-")
     items = get_hero_items(hero)
     result = "\n".join([f"{i+1}. {x}" for i, x in enumerate(items)])
     await message.answer(f"⚔️ Сборка для {hero.title()}:\n\n{result}")
-
-
-async def main():
-    print("🤖 Бот запущен")
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
