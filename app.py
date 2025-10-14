@@ -29,12 +29,15 @@ async def webhook():
     await dp.feed_update(bot, update)
     return "ok", 200
 
-@app.before_first_request
-def setup_webhook():
-    hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-    webhook_url = f"https://{hostname}/webhook"
-    print(f"🌐 Устанавливаем вебхук: {webhook_url}")
-    asyncio.run(bot.set_webhook(webhook_url))
+@app.before_request
+def setup_webhook_once():
+    if not getattr(app, "_webhook_set", False):
+        hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+        webhook_url = f"https://{hostname}/webhook"
+        print(f"🌐 Устанавливаем вебхук: {webhook_url}")
+        asyncio.run(bot.set_webhook(webhook_url))
+        app._webhook_set = True
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
