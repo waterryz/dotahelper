@@ -148,4 +148,24 @@ def handle_message(message):
 # ======================================================
 
 print("✅ Фидос онлайн. Ожидает сообщений в ебучем Telegram...")
-bot.polling(none_stop=True)
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route("/" + TELEGRAM_TOKEN, methods=["POST"])
+def webhook():
+    json_update = request.stream.read().decode("utf-8")
+    update = telebot.types.Update.de_json(json_update)
+    bot.process_new_updates([update])
+    return "!", 200
+
+@app.route("/")
+def index():
+    return "Фидос в онлайне 😎", 200
+
+bot.remove_webhook()
+bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TELEGRAM_TOKEN}")
+
+print("✅ Фидос слушает через webhook Render...")
+app.run(host="0.0.0.0", port=10000)
+
