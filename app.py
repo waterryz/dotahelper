@@ -83,16 +83,17 @@ async def webhook():
 def home():
     return "✅ Бот работает на Flask + Aiogram 3.13"
 
-# === Запуск и настройка webhook ===
-async def on_startup():
+# === Настраиваем webhook при запуске Flask ===
+@app.before_request
+def ensure_webhook():
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
-    await bot.set_webhook(webhook_url)
-    print(f"🌐 Вебхук установлен: {webhook_url}")
+    current = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getWebhookInfo").json()
+    current_url = current.get("result", {}).get("url")
+    if current_url != webhook_url:
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook", params={"url": webhook_url})
+        print(f"🌐 Вебхук установлен: {webhook_url}")
 
-def start():
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(on_startup())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
+# === Точка входа ===
 if __name__ == "__main__":
-    start()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
