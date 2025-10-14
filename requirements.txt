@@ -1,5 +1,7 @@
+Flask==3.0.3
 aiogram==3.13.0
 beautifulsoup4
 lxml
-python-dotenv
 requests
+python-dotenv
+gunicorn
