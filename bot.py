@@ -81,6 +81,35 @@ def save_memory():
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 # Обработка сообщений Telegram
+from utils import search_internet
+
+@bot.message_handler(commands=["поиск"])
+def search_command(message):
+    # Убираем "/поиск" и берём сам запрос
+    query = message.text.replace("/поиск", "").strip()
+    if not query:
+        bot.reply_to(message, "🔎 Напиши, что искать! Например:\n`/поиск герой pudge`", parse_mode="Markdown")
+        return
+
+    bot.reply_to(message, f"⏳ Ищу в интернете про: *{query}*...", parse_mode="Markdown")
+
+    try:
+        info = search_internet(query)
+        if not info or info == "Ничего не найдено.":
+            bot.reply_to(message, f"😕 По запросу *{query}* ничего не нашёл.", parse_mode="Markdown")
+            return
+
+        # Добавляем найденное в память для модели
+        messages.append({
+            "role": "system",
+            "content": f"Информация из интернета по запросу '{query}': {info}"
+        })
+
+        # Отправляем пользователю
+        bot.reply_to(message, f"🌐 Вот что удалось найти:\n\n{info}")
+    except Exception as e:
+        bot.reply_to(message, f"⚠️ Ошибка при поиске: {e}")
+
 @bot.message_handler(commands=["start"])
 def start(message):
     bot.reply_to(
@@ -139,5 +168,6 @@ def handle_message(message):
 # Запуск бота
 print("✅ Фидос онлайн. Ожидает сообщений в вашем ебучем Telegram...")
 bot.polling(none_stop=True)
+
 
 
