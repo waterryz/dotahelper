@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("7641143202:AAHN6GuQQrGXI4tsGwlmUR0rC3ABPohiqlc")
+BOT_TOKEN = os.getenv(7641143202:AAHN6GuQQrGXI4tsGwlmUR0rC3ABPohiqlc)
 if not BOT_TOKEN:
     raise RuntimeError("❌ BOT_TOKEN не найден в переменных окружения!")
 
