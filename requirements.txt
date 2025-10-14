@@ -1,8 +1,7 @@
 Flask==3.0.3
-aiogram==3.4.1
+aiogram==2.25.1
 requests
 beautifulsoup4
-lxml==5.2.1
+lxml
 python-dotenv
 gunicorn
-pydantic==2.5.3
