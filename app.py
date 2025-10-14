@@ -3,21 +3,23 @@ import asyncio
 import requests
 from flask import Flask, request
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Update
+from aiogram.filters import CommandStart
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# --- Загрузка переменных ---
+# === Загружаем переменные окружения ===
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN не найден в переменных окружения!")
+    raise ValueError("❌ BOT_TOKEN не найден в переменных окружения!")
 
+# === Инициализация Flask и Aiogram ===
+app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-app = Flask(__name__)
 
-# --- Парсеры ---
+# === Функции парсинга Dotabuff ===
 def get_meta_heroes():
     url = "https://www.dotabuff.com/heroes/meta"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -35,12 +37,17 @@ def get_hero_items(hero: str):
     rows = soup.find_all("tr")[1:11]
     return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
 
-# --- Telegram handlers ---
-from aiogram.filters import CommandStart
-
+# === Aiogram Handlers ===
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
-
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔥 Актуальная мета", callback_data="meta")],
+        [InlineKeyboardButton(text="⚔️ Актуальные сборки", callback_data="builds")]
+    ])
+    await message.answer(
+        "Привет! 💎 Я Dota 2 помощник.\nВыбери, что хочешь узнать:",
+        reply_markup=kb
+    )
 
 @dp.callback_query(lambda c: c.data == "meta")
 async def show_meta(callback: types.CallbackQuery):
@@ -50,7 +57,10 @@ async def show_meta(callback: types.CallbackQuery):
 
 @dp.callback_query(lambda c: c.data == "builds")
 async def ask_hero(callback: types.CallbackQuery):
-    await bot.send_message(callback.from_user.id, "Введи имя героя латиницей (например, `sven`, `lion`, `invoker`).")
+    await bot.send_message(
+        callback.from_user.id,
+        "Введи имя героя латиницей (например, `sven`, `lion`, `invoker`)."
+    )
 
 @dp.message()
 async def show_hero_build(message: types.Message):
@@ -62,24 +72,27 @@ async def show_hero_build(message: types.Message):
     except Exception:
         await message.answer("❌ Не удалось найти такого героя. Попробуй, например: `juggernaut`, `pudge`, `storm-spirit`")
 
-# --- Flask routes ---
-@app.route("/", methods=["GET"])
-def home():
-    return "✅ Flask бот для Dota 2 работает!"
-
+# === Flask endpoint для webhook ===
 @app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json(force=True)
-    update = Update.model_validate(data)
-    asyncio.get_event_loop().create_task(dp.feed_update(bot, update))
-    return "OK", 200
+async def webhook():
+    update = types.Update.model_validate(await request.json)
+    await dp.feed_update(bot, update)
+    return {"ok": True}
 
-# --- Webhook setup ---
-@app.before_serving
-async def setup_webhook():
-    hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-    webhook_url = f"https://{hostname}/webhook"
-    print(f"🌐 Устанавливаем вебхук: {webhook_url}")
-    await bot.delete_webhook(drop_pending_updates=True)
+@app.route("/")
+def home():
+    return "✅ Бот работает на Flask + Aiogram 3.13"
+
+# === Запуск и настройка webhook ===
+async def on_startup():
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
     await bot.set_webhook(webhook_url)
-    print("✅ Вебхук установлен и бот готов к работе!")
+    print(f"🌐 Вебхук установлен: {webhook_url}")
+
+def start():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(on_startup())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+if __name__ == "__main__":
+    start()
