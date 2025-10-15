@@ -2,3 +2,6 @@ aiogram==3.13.0
 python-dotenv==1.1.1
 openai==1.55.3
 httpx==0.27.2
+beautifulsoup4
+aiohttp
+
