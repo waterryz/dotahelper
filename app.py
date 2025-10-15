@@ -76,12 +76,13 @@ def home():
     return "✅ Бот работает на Flask + Aiogram 3.13"
 
 @app.route("/webhook", methods=["POST"])
-async def webhook():
-    update = types.Update.model_validate(await request.json)
-    await dp.feed_update(bot, update)
+def webhook():
+    """Синхронная обёртка для async webhook"""
+    update_data = request.get_json()
+    asyncio.run(dp.feed_update(bot, types.Update.model_validate(update_data)))
     return {"ok": True}
 
-# === Установка вебхука при старте ===
+# === Установка вебхука при запуске ===
 async def setup_webhook():
     if not RENDER_URL:
         print("⚠️ RENDER_EXTERNAL_HOSTNAME не найден! Укажи вручную в Render Settings.")
