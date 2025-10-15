@@ -35,29 +35,23 @@ SYSTEM_PROMPT = """
 # ──────────────────────────────────────────────
 # ✅ ФУНКЦИЯ для парсинга DotaBuff
 async def get_meta_heroes():
-    url = "https://www.dotabuff.com/heroes/winning"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    
+    url = "https://api.opendota.com/api/heroStats"
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
+        async with session.get(url) as response:
             if response.status != 200:
-                raise Exception("Не удалось получить мету (ошибка запроса)")
+                raise Exception(f"Ошибка OpenDota API ({response.status})")
             
-            html = await response.text()
-            soup = BeautifulSoup(html, "html.parser")
-
+            data = await response.json()
+            # Вычисляем винрейт из статистики про-игр
             heroes = []
-            table = soup.find("table", {"class": "sortable"})
-            if not table:
-                raise Exception("Не найден список героев")
+            for hero in data:
+                if hero["pro_pick"] and hero["pro_pick"] > 0:
+                    win_rate = (hero["pro_win"] / hero["pro_pick"]) * 100
+                    heroes.append((hero["localized_name"], win_rate))
             
-            for row in table.find_all("tr")[1:6]:  # Топ 5 героев
-                cols = row.find_all("td")
-                hero_name = cols[1].text.strip()
-                win_rate = cols[2].text.strip()
-                heroes.append((hero_name, win_rate))
-            
-            return heroes
+            # Сортируем и выбираем топ-5
+            heroes.sort(key=lambda x: x[1], reverse=True)
+            return [(name, f"{rate:.2f}%") for name, rate in heroes[:5]]
 
 # ──────────────────────────────────────────────
 # Команда /start
