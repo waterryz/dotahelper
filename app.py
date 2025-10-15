@@ -71,9 +71,12 @@ async def show_hero_build(message: types.Message):
         await message.answer("❌ Герой не найден. Попробуй, например: `juggernaut`, `pudge`, `storm-spirit`")
 
 # === Flask routes ===
-@app.route("/")
-def home():
-    return "✅ Бот работает на Flask + Aiogram 3.13"
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    update_data = request.get_json()
+    print("📩 Получен апдейт:", update_data)  # <-- добавляем лог
+    asyncio.run(dp.feed_update(bot, types.Update.model_validate(update_data)))
+    return {"ok": True}
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
