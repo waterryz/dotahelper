@@ -34,24 +34,42 @@ SYSTEM_PROMPT = """
 
 # ──────────────────────────────────────────────
 # ✅ ФУНКЦИЯ для парсинга DotaBuff
-async def get_meta_heroes():
-    url = "https://api.opendota.com/api/heroStats"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status != 200:
-                raise Exception(f"Ошибка OpenDota API ({response.status})")
-            
-            data = await response.json()
-            # Вычисляем винрейт из статистики про-игр
-            heroes = []
-            for hero in data:
-                if hero["pro_pick"] and hero["pro_pick"] > 0:
-                    win_rate = (hero["pro_win"] / hero["pro_pick"]) * 100
-                    heroes.append((hero["localized_name"], win_rate))
-            
-            # Сортируем и выбираем топ-5
-            heroes.sort(key=lambda x: x[1], reverse=True)
-            return [(name, f"{rate:.2f}%") for name, rate in heroes[:5]]
+import aiohttp
+from aiogram import types
+from aiogram.filters import Command
+
+@dp.message(Command("meta"))
+async def get_meta(message: types.Message):
+    try:
+        url = "https://api.opendota.com/api/heroStats"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    await message.answer("⚠ Не удалось получить данные OpenDota.")
+                    return
+
+                data = await resp.json()
+                heroes = []
+
+                # Вычисляем винрейт из матчей про-игроков
+                for hero in data:
+                    pro_pick = hero.get("pro_pick", 0)
+                    pro_win = hero.get("pro_win", 0)
+                    if pro_pick > 20:  # фильтруем героев с слишком малым кол-вом игр
+                        winrate = (pro_win / pro_pick) * 100
+                        heroes.append((hero["localized_name"], winrate))
+
+                heroes.sort(key=lambda x: x[1], reverse=True)
+                top5 = heroes[:20]
+
+                text = "🔥 Топ-20 героев по винрейту (данные OpenDota):\n\n"
+                for name, rate in top5:
+                    text += f"• {name} — {rate:.2f}%\n"
+
+                await message.answer(text)
+
+    except Exception as e:
+        await message.answer(f"⚠ Ошибка при получении меты: {e}")
 
 # ──────────────────────────────────────────────
 # Команда /start
