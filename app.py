@@ -8,18 +8,21 @@ from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
 
-# Загружаем переменные окружения (.env)
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Flask-приложение
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dotahelper.onrender.com")
+
 app = Flask(__name__)
 
-# Настраиваем бота и диспетчер
+# создаём глобальный event loop
+loop = asyncio.get_event_loop()
+
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 
-# === Вспомогательные функции ===
+
+# ======= Вспомогательные функции =======
 
 def get_meta_heroes():
     url = "https://www.dotabuff.com/heroes/meta"
@@ -39,7 +42,7 @@ def get_hero_items(hero: str):
     return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
 
 
-# === Хендлеры Telegram ===
+# ======= Хендлеры Telegram =======
 
 @dp.message(F.text == "/start")
 async def start_handler(message: types.Message):
@@ -60,9 +63,7 @@ async def show_meta(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "builds")
 async def ask_hero(callback: types.CallbackQuery):
-    await callback.message.answer(
-        "Введи имя героя латиницей (например, <b>sven</b>, <b>lion</b>, <b>invoker</b>)."
-    )
+    await callback.message.answer("Введи имя героя латиницей (например, <b>sven</b>, <b>lion</b>, <b>invoker</b>).")
     await callback.answer()
 
 
@@ -77,7 +78,7 @@ async def hero_build(message: types.Message):
         await message.answer("❌ Герой не найден или данные временно недоступны.")
 
 
-# === Flask webhook ===
+# ======= Flask webhook =======
 
 @app.route("/", methods=["GET"])
 def index():
@@ -87,20 +88,20 @@ def index():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     update_data = request.get_json()
+    update = types.Update.model_validate(update_data)
     print("📩 Получен апдейт:", update_data)
-    asyncio.run(dp.feed_update(bot, types.Update.model_validate(update_data)))
+
+    # создаём асинхронную задачу, не закрывая event loop
+    loop.create_task(dp.feed_update(bot, update))
+
     return {"ok": True}
 
 
-# === Установка webhook ===
+# ======= Установка webhook =======
 if __name__ == "__main__":
-    RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dotahelper.onrender.com")
     webhook_url = f"{RENDER_URL}/webhook"
-
-    print("🔗 Установка webhook...")
-    set_hook = requests.get(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}"
-    ).json()
-    print(set_hook)
+    print(f"🔗 Установка webhook: {webhook_url}")
+    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}")
+    print(resp.json())
 
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
