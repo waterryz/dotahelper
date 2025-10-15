@@ -20,23 +20,70 @@ dp = Dispatcher()
 
 # === Вспомогательные функции ===
 def get_meta_heroes():
-    """Парсинг топ-10 героев с Dotabuff."""
     url = "https://www.dotabuff.com/heroes/meta"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    soup = BeautifulSoup(requests.get(url, headers=headers).text, "lxml")
-    rows = soup.find_all("tr")[1:11]
-    return [
-        f"{r.find_all('td')[1].text.strip()} — 🏆 {r.find_all('td')[2].text.strip()} | 📈 {r.find_all('td')[3].text.strip()}"
-        for r in rows
-    ]
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/127.0.0.1 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Referer": "https://www.google.com/",
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception("Не удалось получить мету (ошибка запроса)")
+
+    soup = BeautifulSoup(response.text, "lxml")
+    table = soup.find("table", class_="sortable")
+    if not table:
+        raise Exception("Таблица меты не найдена — Dotabuff мог изменить структуру")
+
+    rows = table.find_all("tr")[1:11]
+    meta_list = []
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) >= 4:
+            hero_name = cols[1].get_text(strip=True)
+            win_rate = cols[2].get_text(strip=True)
+            pick_rate = cols[3].get_text(strip=True)
+            meta_list.append(f"{hero_name} — 🏆 {win_rate} | 📈 {pick_rate}")
+
+    return meta_list
 
 def get_hero_items(hero: str):
-    """Парсинг топ-10 предметов для героя."""
     url = f"https://www.dotabuff.com/heroes/{hero}/items"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    soup = BeautifulSoup(requests.get(url, headers=headers).text, "lxml")
-    rows = soup.find_all("tr")[1:11]
-    return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/127.0.0.1 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Referer": "https://www.google.com/",
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception("Failed to load page")
+
+    soup = BeautifulSoup(response.text, "lxml")
+    table = soup.find("table", class_="sortable")
+    if not table:
+        raise Exception("No table found on page")
+
+    rows = table.find_all("tr")[1:11]
+    items = []
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) >= 3:
+            name = cols[1].get_text(strip=True)
+            winrate = cols[2].get_text(strip=True)
+            items.append(f"{name} — {winrate}")
+    return items
 
 # === Хендлеры ===
 @dp.message(F.text == "/start")
