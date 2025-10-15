@@ -110,11 +110,18 @@ if __name__ == "__main__":
     # Запускаем event loop в фоне
     Thread(target=start_loop, daemon=True).start()
 
-    # Устанавливаем webhook
+    # Удаляем старый вебхук (на всякий случай)
+    requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook")
+
+    # Устанавливаем новый вебхук
     webhook_url = f"{RENDER_URL}/webhook"
     print(f"🔗 Установка webhook: {webhook_url}")
     resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}")
     print(resp.json())
+
+    # Запускаем Flask
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
 
     # Запускаем Flask
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
