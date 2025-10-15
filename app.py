@@ -59,9 +59,9 @@ async def get_meta(message: types.Message):
                         heroes.append((hero["localized_name"], winrate))
 
                 heroes.sort(key=lambda x: x[1], reverse=True)
-                top5 = heroes[:5]
+                top5 = heroes[:20]
 
-                text = "🔥 Топ-5 героев по винрейту (данные OpenDota):\n\n"
+                text = "🔥 Топ-20 героев по винрейту (данные OpenDota):\n\n"
                 for name, rate in top5:
                     text += f"• {name} — {rate:.2f}%\n"
 
