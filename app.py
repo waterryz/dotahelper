@@ -96,14 +96,18 @@ async def ask_ai(message: types.Message):
 
 # ──────────────────────────────────────────────
 # Настройка webhook для Render
+from aiogram import types
+
 async def handle(request):
     try:
-        update = await request.json()
-        await dp.feed_update(bot, update)
+        data = await request.json()
+        update = types.Update(**data)  # преобразуем dict → Update
+        await dp.feed_webhook_update(bot=bot, update=update)
         return web.Response(status=200)
     except Exception as e:
         logging.error(f"Ошибка обработки webhook: {e}")
         return web.Response(status=500)
+
 
 async def main():
     app = web.Application()
