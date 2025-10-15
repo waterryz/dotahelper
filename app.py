@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dotahelper.onrender.com")
+RENDER_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'dotahelper.onrender.com')}"
 
 app = Flask(__name__)
 
