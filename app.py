@@ -1,33 +1,26 @@
-import os
 import asyncio
-from threading import Thread
-from flask import Flask, request
+import os
+import requests
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
-from dotenv import load_dotenv
-import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
 # === Настройка окружения ===
 load_dotenv()
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-RENDER_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'dotahelper.onrender.com')}"
 
-app = Flask(__name__)
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN не найден! Укажи его в .env или переменных окружения.")
 
-# === Глобальный event loop ===
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
+# === Инициализация бота ===
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 
-
 # === Вспомогательные функции ===
-
 def get_meta_heroes():
+    """Парсинг топ-10 героев с Dotabuff."""
     url = "https://www.dotabuff.com/heroes/meta"
     headers = {"User-Agent": "Mozilla/5.0"}
     soup = BeautifulSoup(requests.get(url, headers=headers).text, "lxml")
@@ -38,15 +31,14 @@ def get_meta_heroes():
     ]
 
 def get_hero_items(hero: str):
+    """Парсинг топ-10 предметов для героя."""
     url = f"https://www.dotabuff.com/heroes/{hero}/items"
     headers = {"User-Agent": "Mozilla/5.0"}
     soup = BeautifulSoup(requests.get(url, headers=headers).text, "lxml")
     rows = soup.find_all("tr")[1:11]
     return [f"{r.find_all('td')[1].text.strip()} — {r.find_all('td')[2].text.strip()}" for r in rows]
 
-
-# === Хендлеры Aiogram ===
-
+# === Хендлеры ===
 @dp.message(F.text == "/start")
 async def start_handler(message: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -55,7 +47,6 @@ async def start_handler(message: types.Message):
     ])
     await message.answer("Привет! 💎 Я Dota 2 бот.\nВыбери действие:", reply_markup=kb)
 
-
 @dp.callback_query(F.data == "meta")
 async def show_meta(callback: types.CallbackQuery):
     heroes = get_meta_heroes()
@@ -63,14 +54,12 @@ async def show_meta(callback: types.CallbackQuery):
     await callback.message.answer(text)
     await callback.answer()
 
-
 @dp.callback_query(F.data == "builds")
 async def ask_hero(callback: types.CallbackQuery):
     await callback.message.answer(
         "Введи имя героя латиницей (например, <b>sven</b>, <b>lion</b>, <b>invoker</b>)."
     )
     await callback.answer()
-
 
 @dp.message()
 async def hero_build(message: types.Message):
@@ -82,46 +71,10 @@ async def hero_build(message: types.Message):
     except Exception:
         await message.answer("❌ Герой не найден или данные временно недоступны.")
 
+# === Основной запуск ===
+async def main():
+    print("🚀 Бот запущен!")
+    await dp.start_polling(bot)
 
-# === Flask routes ===
-
-@app.route("/", methods=["GET"])
-def index():
-    return "✅ Dota 2 Bot работает!"
-
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    update_data = request.get_json()
-    print("📩 Получен апдейт:", update_data)
-    update = types.Update.model_validate(update_data)
-    asyncio.run_coroutine_threadsafe(dp.feed_update(bot, update), loop)
-    return {"ok": True}
-
-
-# === Запускаем event loop в отдельном потоке ===
-def start_loop():
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
-
-
-# === Main ===
 if __name__ == "__main__":
-    # Запускаем event loop в фоне
-    Thread(target=start_loop, daemon=True).start()
-
-    # Удаляем старый вебхук (на всякий случай)
-    requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook")
-
-    # Устанавливаем новый вебхук
-    webhook_url = f"{RENDER_URL}/webhook"
-    print(f"🔗 Установка webhook: {webhook_url}")
-    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}")
-    print(resp.json())
-
-    # Запускаем Flask
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
-
-    # Запускаем Flask
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    asyncio.run(main())
