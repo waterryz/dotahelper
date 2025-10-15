@@ -1,80 +1,67 @@
-import asyncio
-import aiohttp
-import logging
 import os
+import logging
+import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import Message
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 # ──────────────────────────────────────────────
-# Загрузка токена
+# Настройка окружения
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("7641143202:AAHN6GuQQrGXI4tsGwlmUR0rC3ABPohiqlc")
+OPENAI_API_KEY = os.getenv("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")
 
-if not BOT_TOKEN:
-    raise Exception("❌ BOT_TOKEN не найден. Убедись, что он задан в .env или в Render Environment Variables.")
+if not BOT_TOKEN or not OPENAI_API_KEY:
+    raise Exception("❌ Убедись, что BOT_TOKEN и OPENAI_API_KEY заданы в .env")
 
-# ──────────────────────────────────────────────
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # ──────────────────────────────────────────────
-# Функция для получения меты героев (пример с OpenDota API)
-async def get_meta_heroes():
-    API_URL = "https://api.opendota.com/api/heroes"
-    try:
-        async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.get(API_URL, timeout=15) as response:
-                if response.status != 200:
-                    logging.error(f"Ошибка при запросе: {response.status}")
-                    return None
-                data = await response.json()
-                return data
-    except Exception as e:
-        logging.error(f"Ошибка при получении меты: {e}")
-        return None
+# Подключаем клиента OpenAI
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+SYSTEM_PROMPT = """
+Ты — эксперт по Dota 2, называешься DotaAI. 
+Ты советуешь игрокам, кого пикнуть против других героев, какие предметы собирать, и как вести себя на линии.
+Отвечай кратко, но точно, как опытный киберспортсмен.
+"""
 
 # ──────────────────────────────────────────────
-# Команда /start
 @dp.message(Command("start"))
-async def start_command(message: Message):
-    await message.answer(
-        "Привет! ⚡ Введи имя героя латиницей (например, sven, lion, invoker)."
-    )
+async def start_cmd(message: Message):
+    await message.answer("👋 Привет! Я DotaAI. Напиши мне имя героя или задай вопрос — и я помогу тебе с билдом, контрпиками или стратегией.")
 
 # ──────────────────────────────────────────────
-# Поиск героя по имени
 @dp.message()
-async def find_hero(message: Message):
-    hero_name = message.text.strip().lower()
-    heroes = await get_meta_heroes()
+async def ask_ai(message: Message):
+    user_input = message.text.strip()
 
-    if not heroes:
-        await message.answer("❌ Данные временно недоступны. Попробуй позже.")
-        return
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",  # можно gpt-4o или gpt-5, если доступно
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0.7,
+            max_tokens=400
+        )
 
-    for hero in heroes:
-        if hero_name == hero["name"].split("_")[-1]:  # "npc_dota_hero_lion" → "lion"
-            localized = hero["localized_name"]
-            id_ = hero["id"]
-            await message.answer(
-                f"🦸 Герой найден!\n\n"
-                f"ID: {id_}\n"
-                f"Имя: {localized}\n"
-                f"API-имя: {hero['name']}"
-            )
-            return
+        answer = response.choices[0].message.content.strip()
+        await message.answer(f"🎯 {answer}")
 
-    await message.answer("❌ Герой не найден или данные временно недоступны.")
+    except Exception as e:
+        logging.error(f"Ошибка при запросе к ИИ: {e}")
+        await message.answer("⚠ Что-то пошло не так. Попробуй позже.")
 
 # ──────────────────────────────────────────────
-# Основной запуск (без Flask)
 async def main():
-    logging.info("🚀 Бот запущен и готов к работе!")
+    logging.info("🚀 DotaAI запущен!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
