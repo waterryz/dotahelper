@@ -1,11 +1,10 @@
 import os
 import logging
 import asyncio
-import aiohttp
-from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiohttp import web
+import aiohttp
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
@@ -16,28 +15,30 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not BOT_TOKEN or not OPENAI_API_KEY:
-    raise Exception("❌ Убедись, что BOT_TOKEN и OPENAI_API_KEY заданы в .env или Environment Variables Render")
+    raise Exception("❌ Убедись, что BOT_TOKEN и OPENAI_API_KEY заданы в .env или переменных Render")
 
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
-# ──────────────────────────────────────────────
-# SYSTEM PROMPT для GPT
 SYSTEM_PROMPT = """
 Ты — эксперт по Dota 2, называешься DotaAI. 
 Ты советуешь игрокам, кого пикнуть против других героев, какие предметы собирать, и как вести себя на линии.
-Отвечай кратко, но точно, как опытный киберспортсмен.
+Отвечай кратко, но точно, как опытный аналитик DotaBuff.
 """
 
 # ──────────────────────────────────────────────
-# ✅ ФУНКЦИЯ для парсинга DotaBuff
-import aiohttp
-from aiogram import types
-from aiogram.filters import Command
+# Команда /start
+@dp.message(Command("start"))
+async def start_cmd(message: types.Message):
+    await message.answer("👋 Привет! Я DotaAI. Напиши имя героя или задай вопрос — и я помогу тебе с билдом, контрпиками или стратегией.\n\n"
+                         "Также можешь использовать /meta, чтобы узнать текущую мету!")
 
+# ──────────────────────────────────────────────
+# Команда /meta (через OpenDota)
 @dp.message(Command("meta"))
 async def get_meta(message: types.Message):
     try:
@@ -50,50 +51,29 @@ async def get_meta(message: types.Message):
 
                 data = await resp.json()
                 heroes = []
-
-                # Вычисляем винрейт из матчей про-игроков
                 for hero in data:
                     pro_pick = hero.get("pro_pick", 0)
                     pro_win = hero.get("pro_win", 0)
-                    if pro_pick > 20:  # фильтруем героев с слишком малым кол-вом игр
+                    if pro_pick > 20:
                         winrate = (pro_win / pro_pick) * 100
                         heroes.append((hero["localized_name"], winrate))
 
                 heroes.sort(key=lambda x: x[1], reverse=True)
-                top5 = heroes[:20]
+                top5 = heroes[:5]
 
-                text = "🔥 Топ-20 героев по винрейту (данные OpenDota):\n\n"
+                text = "🔥 Топ-5 героев по винрейту (данные OpenDota):\n\n"
                 for name, rate in top5:
                     text += f"• {name} — {rate:.2f}%\n"
 
                 await message.answer(text)
-
     except Exception as e:
+        logging.error(f"Ошибка при /meta: {e}")
         await message.answer(f"⚠ Ошибка при получении меты: {e}")
 
 # ──────────────────────────────────────────────
-# Команда /start
-@dp.message(Command("start"))
-async def start_cmd(message: Message):
-    await message.answer("👋 Привет! Я DotaAI. Напиши мне имя героя или команду /meta — покажу топ-героев по винрейту.")
-
-# ──────────────────────────────────────────────
-# ✅ Команда /meta — показывает актуальную мету с DotaBuff
-@dp.message(Command("meta"))
-async def show_meta(message: Message):
-    try:
-        heroes = await get_meta_heroes()
-        text = "🔥 Топ-5 героев по винрейту (данные DotaBuff):\n\n"
-        for name, rate in heroes:
-            text += f"• {name} — {rate}\n"
-        await message.answer(text)
-    except Exception as e:
-        await message.answer(f"⚠ Не удалось загрузить мету: {e}")
-
-# ──────────────────────────────────────────────
-# Общие запросы к GPT
+# Обработка всех остальных сообщений
 @dp.message()
-async def ask_ai(message: Message):
+async def ask_ai(message: types.Message):
     user_input = message.text.strip()
 
     try:
@@ -115,10 +95,33 @@ async def ask_ai(message: Message):
         await message.answer("⚠ Что-то пошло не так. Попробуй позже.")
 
 # ──────────────────────────────────────────────
-# Запуск бота
+# Настройка webhook для Render
+async def handle(request):
+    try:
+        update = await request.json()
+        await dp.feed_update(bot, update)
+        return web.Response(status=200)
+    except Exception as e:
+        logging.error(f"Ошибка обработки webhook: {e}")
+        return web.Response(status=500)
+
 async def main():
-    logging.info("🚀 DotaAI запущен!")
-    await dp.start_polling(bot)
+    app = web.Application()
+    app.router.add_post(f"/{BOT_TOKEN}", handle)
+
+    # Настройка webhook
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
+    await bot.set_webhook(webhook_url)
+    logging.info(f"🚀 Webhook установлен: {webhook_url}")
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 10000)))
+    await site.start()
+
+    logging.info("🌐 Сервер запущен и слушает порт.")
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     try:
