@@ -10,14 +10,13 @@ from dotenv import load_dotenv
 # ──────────────────────────────────────────────
 # Настройка окружения
 load_dotenv()
-BOT_TOKEN = os.getenv("7641143202:AAHN6GuQQrGXI4tsGwlmUR0rC3ABPohiqlc")
-OPENAI_API_KEY = os.getenv("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")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not BOT_TOKEN or not OPENAI_API_KEY:
     raise Exception("❌ Убедись, что BOT_TOKEN и OPENAI_API_KEY заданы в .env")
 
 logging.basicConfig(level=logging.INFO)
-
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
