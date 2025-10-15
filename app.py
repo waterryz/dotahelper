@@ -47,16 +47,16 @@ async def start_cmd(message: types.Message):
     ])
     await message.answer("Привет! 💎 Я Dota 2 бот.\nВыбери действие:", reply_markup=kb)
 
-from aiogram.filters import Text
+from aiogram import F
 
-@dp.callback_query(Text("meta"))
+@dp.callback_query(F.data == "meta")
 async def show_meta(callback: types.CallbackQuery):
     heroes = get_meta_heroes()
     text = "🔥 Топ-10 героев по мете:\n\n" + "\n".join(heroes)
     await callback.message.answer(text)
-    await callback.answer()  # <- важно! закрывает "часики" в Telegram
+    await callback.answer()
 
-@dp.callback_query(Text("builds"))
+@dp.callback_query(F.data == "builds")
 async def ask_hero(callback: types.CallbackQuery):
     await callback.message.answer(
         "Введи имя героя латиницей (например, `sven`, `lion`, `invoker`).",
