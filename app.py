@@ -75,6 +75,10 @@ async def hero_build(message: types.Message):
 async def main():
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
+    print("🚀 Удаляем старый webhook (если был)...")
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("✅ Webhook удалён. Запускаем polling...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
