@@ -129,8 +129,13 @@ async def message_handler(message: types.Message):
             max_tokens=400
         )
 
-        answer = response.choices[0].message.content.strip()
-        await message.answer(f"🎯 {answer}")
+        webapp_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/metaapp"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="📊 Показать мету", web_app=WebAppInfo(url=webapp_url))
+        ]])
+
+# Отправляем ответ с кнопкой
+        await message.answer(f"🎯 {answer}", reply_markup=keyboard)
 
     except Exception as e:
         logging.error(f"Ошибка при запросе к ИИ: {e}")
