@@ -28,7 +28,7 @@ dp = Dispatcher()
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # ──────────────────────────────────────────────
-# Telegram Mini App (WebApp)
+# Telegram Mini App (WebApp) — кнопка "📊 Мета"
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
     webapp_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/metaapp"
@@ -43,7 +43,7 @@ async def start_cmd(message: types.Message):
     )
 
 # ──────────────────────────────────────────────
-# Получение меты с OpenDota
+# Функция получения меты (OpenDota)
 async def fetch_meta():
     async with aiohttp.ClientSession() as session:
         async with session.get("https://api.opendota.com/api/heroStats") as resp:
@@ -65,7 +65,7 @@ async def fetch_meta():
             ]
 
 # ──────────────────────────────────────────────
-# WebApp страница (внутри Telegram)
+# Mini App страница (рендерится внутри Telegram)
 async def meta_webapp(request):
     meta = await fetch_meta()
     if not meta:
@@ -154,69 +154,26 @@ def log_message(user_id: int, username: str, text: str):
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
 
-        data = data[-500:]
+        data = data[-500:]  # максимум 500 последних
 
         with open(LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
     except Exception as e:
         logging.error(f"Ошибка логирования: {e}")
 
-# Обновлённый обработчик сообщений
+# Обновлённый обработчик сообщений (с логированием)
 @dp.message()
 async def default_message(message: types.Message):
     log_message(message.from_user.id, message.from_user.username, message.text)
     await message.answer("💡 Используй кнопку внизу, чтобы открыть мини-приложение!")
 
-# ──────────────────────────────────────────────
-# Шаблон HTML для админки
-def admin_html(content: str):
-    return f"""
-    <html>
-    <head>
-        <title>DotaAI Admin</title>
-        <style>
-            body {{
-                font-family: 'Segoe UI', sans-serif;
-                background-color: #0e1117;
-                color: #f0f0f0;
-                text-align: center;
-                padding: 30px;
-            }}
-            .hero {{
-                background: #1c1f26;
-                border-radius: 10px;
-                padding: 10px;
-                margin: 10px auto;
-                width: 60%;
-            }}
-            button {{
-                background: #0078ff;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-            }}
-            button:hover {{
-                background: #005ecc;
-            }}
-            .error {{ color: #ff4b4b; }}
-        </style>
-    </head>
-    <body>
-        <h1>⚙️ DotaAI — Панель администратора</h1>
-        {content}
-    </body>
-    </html>
-    """
-
-# ──────────────────────────────────────────────
 # Страница админ-панели
 async def admin_page(request):
     password = request.query.get("password", "")
     if password != ADMIN_PASSWORD:
         return web.Response(
-            text=admin_html("<h3 class='error'>❌ Доступ запрещён. Добавь ?password=...</h3>"),
+            text="<h3 style='color:red;'>❌ Доступ запрещён. Добавь ?password=...</h3>",
             content_type="text/html"
         )
 
@@ -227,17 +184,58 @@ async def admin_page(request):
             logs = json.load(f)
 
     rows = ""
-    for msg in reversed(logs[-100:]):
+    for msg in reversed(logs[-100:]):  # последние 100
+        color = "#00ff95" if msg["user_id"] == 0 else "#f0f0f0"
         rows += f"""
-        <div class='hero'>
-            <b>🕒 {msg['time']}</b><br>
-            👤 <b>{msg['username']}</b><br>
-            💬 {msg['text']}
-        </div>
+        <tr style='color:{color};'>
+            <td>{msg['time']}</td>
+            <td>{msg['username']}</td>
+            <td>{msg['text']}</td>
+        </tr>
         """
 
-    content = f"<p>Всего сообщений: {len(logs)}</p>{rows}"
-    return web.Response(text=admin_html(content), content_type="text/html")
+    html = f"""
+    <html>
+    <head>
+        <title>DotaAI Admin Panel</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{
+                background-color: #0e1117;
+                color: #fff;
+                font-family: 'Segoe UI', sans-serif;
+                padding: 20px;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }}
+            td, th {{
+                border-bottom: 1px solid #222;
+                padding: 8px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #1c1f26;
+            }}
+            h1 {{
+                color: #00aaff;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>⚙️ DotaAI — Панель администратора</h1>
+        <p>Всего сообщений: {len(logs)}</p>
+        <table>
+            <tr><th>🕒 Время</th><th>👤 Пользователь</th><th>💬 Сообщение</th></tr>
+            {rows}
+        </table>
+    </body>
+    </html>
+    """
+
+    return web.Response(text=html, content_type="text/html")
 
 # ──────────────────────────────────────────────
 # Webhook и health-check
