@@ -118,22 +118,17 @@ async def admin_panel(request):
         state = json.load(open(STATE_FILE, "r", encoding="utf-8"))
 
     query = request.rel_url.query.get("q", "").lower()
-
-    # Фильтр по поиску
     if query:
         logs = [x for x in logs if query in (x["username"] or "").lower() or query in x["text"].lower()]
 
-    # Статистика
     users = [l["username"] for l in logs]
     stats_html = f"<p>👥 Уникальных пользователей: {len(set(users))}<br>💬 Всего сообщений: {len(logs)}</p>"
     top_users = Counter(users).most_common(5)
     if top_users:
         stats_html += "<h3>🏆 Топ активных:</h3><ul>" + "".join([f"<li>{u} — {c}</li>" for u, c in top_users]) + "</ul>"
 
-    # Список логов
     log_html = "".join([f"<div class='hero'><b>{l['username']}</b> — {l['time']}<br>{l['text']}</div>" for l in logs[-50:]])
 
-    # Панель управления
     status = "🟢 Включен" if not state.get("disabled") else "🔴 Выключен"
     controls = f"""
     <form method='get'>
@@ -148,6 +143,10 @@ async def admin_panel(request):
     <form method='post' action='/toggle'>
         <input type='hidden' name='pwd' value='{pwd}'>
         <button type='submit'>⚡ {status}</button>
+    </form>
+    <form method='post' action='/force_on'>
+        <input type='hidden' name='pwd' value='{pwd}'>
+        <button type='submit' style='background:#00ff95;color:black;'>🆘 Принудительно включить бота</button>
     </form>
     """
 
@@ -173,6 +172,14 @@ async def toggle_handler(request):
         json.dump(state, open(STATE_FILE, "w", encoding="utf-8"))
         status = "🟢 Включен" if not state["disabled"] else "🔴 Выключен"
         return web.Response(text=admin_html(f"<p class='green'>⚙️ Бот теперь: {status}</p>"), content_type="text/html")
+    return web.Response(text=admin_html("<p class='error'>⛔ Ошибка доступа</p>"), content_type="text/html")
+
+
+async def force_on_handler(request):
+    data = await request.post()
+    if data.get("pwd") == ADMIN_PASSWORD:
+        json.dump({"disabled": False}, open(STATE_FILE, "w", encoding="utf-8"))
+        return web.Response(text=admin_html("<p class='green'>🆘 Бот принудительно включен!</p>"), content_type="text/html")
     return web.Response(text=admin_html("<p class='error'>⛔ Ошибка доступа</p>"), content_type="text/html")
 
 
@@ -282,6 +289,7 @@ async def main():
     app.router.add_get("/admin", admin_panel)
     app.router.add_post("/clear", clear_handler)
     app.router.add_post("/toggle", toggle_handler)
+    app.router.add_post("/force_on", force_on_handler)
     app.router.add_post(f"/{BOT_TOKEN}", handle)
 
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
