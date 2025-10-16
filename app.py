@@ -1,6 +1,8 @@
 import os
+import json
 import logging
 import asyncio
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
@@ -39,12 +41,6 @@ async def start_cmd(message: types.Message):
         "Нажми на кнопку ниже, чтобы открыть мини-приложение ⬇️",
         reply_markup=keyboard
     )
-
-# ──────────────────────────────────────────────
-# Обработка всех остальных сообщений
-@dp.message()
-async def default_message(message: types.Message):
-    await message.answer("💡 Используй кнопку внизу, чтобы открыть мини-приложение!")
 
 # ──────────────────────────────────────────────
 # Функция получения меты (OpenDota)
@@ -140,6 +136,108 @@ async def meta_webapp(request):
     return web.Response(text=html, content_type="text/html")
 
 # ──────────────────────────────────────────────
+# === ЛОГИРОВАНИЕ И АДМИН-ПАНЕЛЬ ===
+LOG_FILE = "messages.json"
+
+def log_message(user_id: int, username: str, text: str):
+    try:
+        if os.path.exists(LOG_FILE):
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = []
+
+        data.append({
+            "user_id": user_id,
+            "username": username or "—",
+            "text": text,
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+
+        data = data[-500:]  # максимум 500 последних
+
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        logging.error(f"Ошибка логирования: {e}")
+
+# Обновлённый обработчик сообщений (с логированием)
+@dp.message()
+async def default_message(message: types.Message):
+    log_message(message.from_user.id, message.from_user.username, message.text)
+    await message.answer("💡 Используй кнопку внизу, чтобы открыть мини-приложение!")
+
+# Страница админ-панели
+async def admin_page(request):
+    password = request.query.get("password", "")
+    if password != ADMIN_PASSWORD:
+        return web.Response(
+            text="<h3 style='color:red;'>❌ Доступ запрещён. Добавь ?password=...</h3>",
+            content_type="text/html"
+        )
+
+    if not os.path.exists(LOG_FILE):
+        logs = []
+    else:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+
+    rows = ""
+    for msg in reversed(logs[-100:]):  # последние 100
+        color = "#00ff95" if msg["user_id"] == 0 else "#f0f0f0"
+        rows += f"""
+        <tr style='color:{color};'>
+            <td>{msg['time']}</td>
+            <td>{msg['username']}</td>
+            <td>{msg['text']}</td>
+        </tr>
+        """
+
+    html = f"""
+    <html>
+    <head>
+        <title>DotaAI Admin Panel</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{
+                background-color: #0e1117;
+                color: #fff;
+                font-family: 'Segoe UI', sans-serif;
+                padding: 20px;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }}
+            td, th {{
+                border-bottom: 1px solid #222;
+                padding: 8px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #1c1f26;
+            }}
+            h1 {{
+                color: #00aaff;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>⚙️ DotaAI — Панель администратора</h1>
+        <p>Всего сообщений: {len(logs)}</p>
+        <table>
+            <tr><th>🕒 Время</th><th>👤 Пользователь</th><th>💬 Сообщение</th></tr>
+            {rows}
+        </table>
+    </body>
+    </html>
+    """
+
+    return web.Response(text=html, content_type="text/html")
+
+# ──────────────────────────────────────────────
 # Webhook и health-check
 async def handle(request):
     try:
@@ -160,6 +258,7 @@ async def main():
     app = web.Application()
     app.router.add_get("/", health)
     app.router.add_get("/metaapp", meta_webapp)
+    app.router.add_get("/admin", admin_page)
     app.router.add_post(f"/{BOT_TOKEN}", handle)
 
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
