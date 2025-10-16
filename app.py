@@ -142,83 +142,76 @@ async def meta_webapp(request):
 # АДМИН-ПАНЕЛЬ
 def admin_html(content: str):
     return f"""
-    <html>
-    <head>
-        <title>DotaAI Admin</title>
-        <style>
-            body {{
-                font-family: 'Segoe UI', sans-serif;
-                background-color: #0e1117;
-                color: #f0f0f0;
-                padding: 30px;
-                text-align: center;
-            }}
-            .hero {{
-                background: #1c1f26;
-                border-radius: 10px;
-                padding: 10px;
-                margin: 10px auto;
-                width: 60%;
-            }}
-            button {{
-                background: #0078ff;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-            }}
-            button:hover {{ background: #005ecc; }}
-            .error {{ color: #ff4b4b; }}
-            input {{
-                padding: 8px;
-                border-radius: 5px;
-                border: none;
-                width: 200px;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>⚙️ DotaAI — Панель администратора</h1>
-        {content}
-    </body>
-    </html>
-    """
+    <html><head><title>DotaAI Admin</title>
+    <style>
+        body{{font-family:Segoe UI;background:#0e1117;color:#fff;padding:20px;text-align:center}}
+        .hero{{background:#1c1f26;border-radius:10px;padding:10px;margin:10px auto;width:70%}}
+        input,button{{padding:8px;margin:5px;border:none;border-radius:5px}}
+        button{{background:#0078ff;color:white;cursor:pointer}}button:hover{{background:#005ecc}}
+        .error{{color:#ff4b4b}}
+        table{{width:100%;border-collapse:collapse}}th,td{{padding:6px;border-bottom:1px solid #333;text-align:left}}
+        th{{background:#1f232a}}.green{{color:#00ff95}}
+    </style></head><body>
+    <h1>⚙️ DotaAI — Панель администратора</h1>
+    <nav>
+        <a href='/admin?password={ADMIN_PASSWORD}'>📜 Логи</a> |
+        <a href='/admin?password={ADMIN_PASSWORD}&stats=1'>📊 Статистика</a> |
+        <a href='/admin?password={ADMIN_PASSWORD}&clear=1'>🧹 Очистить</a> |
+        <a href='/admin?password={ADMIN_PASSWORD}&toggle=1'>⚡ Вкл/Выкл</a>
+    </nav><hr>
+    {content}
+    </body></html>"""
 
+# ──────────────────────────────────────────────
+# Админ-панель
+async def admin_page(request):
+    password = request.query.get("password", "")
+    if password != ADMIN_PASSWORD:
+        return web.Response(text=admin_html("<h3 class='error'>❌ Доступ запрещён.</h3>"), content_type="text/html")
 
-async def admin_panel(request):
-    pwd = request.rel_url.query.get("pwd", "")
-    if pwd != ADMIN_PASSWORD:
-        return web.Response(text=admin_html("<p class='error'>⛔ Доступ запрещён</p>"), content_type="text/html")
+    logs = json.load(open(LOG_FILE, encoding="utf-8")) if os.path.exists(LOG_FILE) else []
+    params = request.query
 
-    logs = read_logs()
-    users = {l["user_id"]: l.get("username", "—") for l in logs}
-    log_list = "".join([f"<div class='hero'><b>{l['username']}</b>: {l['text']}</div>" for l in logs[-30:]])
+    # Очистка логов
+    if "clear" in params:
+        open(LOG_FILE, "w").write("[]")
+        return web.Response(text=admin_html("<h3 class='green'>✅ Логи очищены!</h3>"), content_type="text/html")
 
-    content = f"""
-    <h3>👥 Пользователей: {len(users)}</h3>
-    <h3>💬 Сообщений: {len(logs)}</h3>
-    <form method='get'>
-        <input type='hidden' name='pwd' value='{pwd}'>
-        <input type='text' name='q' placeholder='Поиск...'>
-        <button type='submit'>🔍 Найти</button>
-    </form>
-    <form action='/clear' method='post'>
-        <input type='hidden' name='pwd' value='{pwd}'>
-        <button type='submit'>🧹 Очистить логи</button>
-    </form>
-    <h2>📜 Последние сообщения:</h2>
-    {log_list}
-    """
+    # Вкл/выкл
+    if "toggle" in params:
+        state = json.load(open(STATE_FILE)) if os.path.exists(STATE_FILE) else {}
+        state["disabled"] = not state.get("disabled", False)
+        json.dump(state, open(STATE_FILE, "w"))
+        status = "🟢 Включен" if not state["disabled"] else "🔴 Выключен"
+        return web.Response(text=admin_html(f"<h3 class='green'>⚙️ Бот теперь: {status}</h3>"), content_type="text/html")
+
+    # Поиск
+    query = params.get("search", "").lower()
+    if query:
+        logs = [x for x in logs if query in (x["username"] or "").lower()]
+
+    # Статистика
+    if "stats" in params:
+        users = [x["username"] for x in logs]
+        unique = len(set(users))
+        top_users = Counter(users).most_common(5)
+        rows = "".join(f"<tr><td>{u}</td><td>{c}</td></tr>" for u, c in top_users)
+        content = f"""
+        <h3>📊 Статистика</h3>
+        <p>Всего сообщений: {len(logs)} | Уникальных пользователей: {unique}</p>
+        <table><tr><th>👤 Пользователь</th><th>💬 Сообщений</th></tr>{rows}</table>
+        """
+        return web.Response(text=admin_html(content), content_type="text/html")
+
+    # Просмотр логов
+    content = "<form><input name='search' placeholder='🔍 Поиск по username'><input type='hidden' name='password' value='" + ADMIN_PASSWORD + "'><button>Искать</button></form><br>"
+    if not logs:
+        content += "<p>Нет сообщений.</p>"
+    else:
+        for msg in reversed(logs[-100:]):
+            content += f"<div class='hero'><b>{msg['username']}</b> — {msg['time']}<br>{msg['text']}</div>"
+
     return web.Response(text=admin_html(content), content_type="text/html")
-
-
-async def clear_handler(request):
-    data = await request.post()
-    if data.get("pwd") == ADMIN_PASSWORD:
-        clear_logs()
-        return web.Response(text=admin_html("<p>✅ Логи очищены</p>"), content_type="text/html")
-    return web.Response(text=admin_html("<p class='error'>⛔ Ошибка доступа</p>"), content_type="text/html")
 
 # ──────────────────────────────────────────────
 # СТАРТ
