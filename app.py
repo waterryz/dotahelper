@@ -103,11 +103,39 @@ def bot_disabled():
 # Сообщения пользователей
 @dp.message()
 async def message_handler(message: types.Message):
+    # Проверяем режим "бот выключен"
     if bot_disabled():
         await message.answer("⚠️ Бот временно выключен администратором.")
         return
+
+    # Логируем сообщение
     log_message(message.from_user.id, message.from_user.username, message.text)
-    await message.answer("💡 Используй кнопку, чтобы открыть мини-приложение!")
+
+    # Отправляем в OpenAI
+    try:
+        SYSTEM_PROMPT = """
+        Ты — эксперт по Dota 2, называешься DotaAI.
+        Отвечай как профессиональный аналитик DotaBuff:
+        кратко, по сути, уверенно.
+        """
+
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message.text}
+            ],
+            temperature=0.7,
+            max_tokens=400
+        )
+
+        answer = response.choices[0].message.content.strip()
+        await message.answer(f"🎯 {answer}")
+
+    except Exception as e:
+        logging.error(f"Ошибка при запросе к ИИ: {e}")
+        await message.answer("⚠️ Что-то пошло не так, попробуй позже.")
+
 
 # ──────────────────────────────────────────────
 # Шаблон HTML
